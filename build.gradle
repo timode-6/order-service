@@ -2,6 +2,11 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.0-SNAPSHOT'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.hibernate.orm' version '7.2.4.Final'
+	id 'org.graalvm.buildtools.native' version '0.11.4'
+	id 'org.sonarqube'              version '7.2.0.6526'
+    id 'jacoco'
+	id 'application'
 }
 
 group = 'com.example'
@@ -12,9 +17,30 @@ java {
 		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
+tasks.named('sonar') {
+    dependsOn tasks.named('test')
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+   	dependsOn test
+    reports {
+        xml.required = true   
+        html.required = true
+    }
+}
+jacoco {
+    toolVersion = "0.8.11"
+}
 
 repositories {
 	mavenCentral()
+	gradlePluginPortal()
+	google()
 	maven { url = 'https://repo.spring.io/snapshot' }
 }
 
@@ -22,26 +48,40 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-liquibase'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-aop:3.5.12'
+
+	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.3.0'
 
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'org.springframework.boot:spring-boot-restclient'
 	annotationProcessor 'org.projectlombok:lombok'
-	
+
 	implementation 'org.mapstruct:mapstruct:1.5.5.Final'
 	implementation 'me.paulschwarz:spring-dotenv:2.5.4'
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0' 
 
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-liquibase-test'
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-liquibase-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webclient-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.boot:spring-boot-test-autoconfigure'
+	testImplementation 'org.springframework.boot:spring-boot-resttestclient'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+	testImplementation 'org.springframework.boot:spring-boot-restclient'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'
+	testImplementation 'org.wiremock.integrations:wiremock-spring-boot:4.0.5'
 	
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
 }
 
 tasks.named('test') {

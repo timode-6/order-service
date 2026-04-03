@@ -1,0 +1,71 @@
+package com.example.order_service.integration;
+
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureTestRestTemplate
+@ActiveProfiles("test")
+@Testcontainers
+public abstract class BaseIntegrationTest {
+
+   static final PostgreSQLContainer postgres =
+            new PostgreSQLContainer("postgres:12-alpine")
+                .withDatabaseName("testdb")
+                .withUsername("test")
+                .withPassword("test");
+
+    static {
+        postgres.start();
+    }
+
+    @DynamicPropertySource
+    static void registerPgProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url",      postgres::getJdbcUrl);
+        registry.add("spring.datasource.username",  postgres::getUsername);
+        registry.add("spring.datasource.password",  postgres::getPassword);
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> 5);
+        registry.add("spring.datasource.hikari.connection-timeout", () -> 20000);
+        registry.add("spring.datasource.hikari.initialization-fail-timeout", () -> 60000);
+    }
+
+    static WireMockServer wireMock = new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
+
+    @LocalServerPort
+    protected int port;
+
+    @Autowired
+    protected TestRestTemplate restTemplate;
+
+    @BeforeAll
+    static void startWireMock() {
+        
+        wireMock.start();
+        System.setProperty("services.user-service.base-url",
+                "http://localhost:" + wireMock.port());
+    }
+
+    @AfterAll
+    static void stopWireMock() {
+        if (wireMock != null && wireMock.isRunning()) {
+            wireMock.stop();
+        }
+    }
+
+    protected String baseUrl(String path) {
+        return "http://localhost:" + port + path;
+    }
+}
