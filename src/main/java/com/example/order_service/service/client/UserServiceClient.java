@@ -85,7 +85,7 @@ public class UserServiceClient {
             return response.getBody();
         } catch (HttpClientErrorException.NotFound ex) {
              log.warn("User with id '{}' not found in User Service", userId);
-            throw new UserNotFoundException(ex.getMessage());
+            throw new UserNotFoundException(userId);
         } catch (RestClientException ex) {
             log.error("User Service call failed: {}", ex.getMessage());
             throw new UserServiceException("User Service is currently unavailable", ex);

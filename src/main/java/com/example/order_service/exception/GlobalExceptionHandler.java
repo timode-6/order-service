@@ -12,33 +12,29 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.time.Instant;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String NOT_FOUND_ERROR_MESSAGE = "Not found";
     private static final String BAD_REQUEST_ERROR_MESSAGE = "Bad Request";
 
     @ExceptionHandler(ItemNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleItemNotFound(
             ItemNotFoundException ex, HttpServletRequest req) {
-        return buildError(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), req.getRequestURI());
+        return buildError(HttpStatus.NOT_FOUND, NOT_FOUND_ERROR_MESSAGE, ex.getMessage(), req.getRequestURI());
     }
 
     @ExceptionHandler(OrderNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(OrderNotFoundException ex) {
-        ErrorResponse body = ErrorResponse.builder()
-                .status(404)
-                .message(ex.getMessage())
-                .timestamp(Instant.now())
-                .build();
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    public ResponseEntity<ErrorResponse> handleNotFound(
+        OrderNotFoundException ex, HttpServletRequest req) {
+        return buildError(HttpStatus.NOT_FOUND, NOT_FOUND_ERROR_MESSAGE, ex.getMessage(), req.getRequestURI());
     }
 
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUserNotFound(
             UserNotFoundException ex, HttpServletRequest req) {
-        return buildError(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), req.getRequestURI());
+        return buildError(HttpStatus.NOT_FOUND, NOT_FOUND_ERROR_MESSAGE, ex.getMessage(), req.getRequestURI());
     }
 
 
@@ -92,9 +88,10 @@ public class GlobalExceptionHandler {
 
 
     @ExceptionHandler(InvalidRequestException.class)
-    public ResponseEntity<String> handleInvalidRequest(InvalidRequestException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-    }
+public ResponseEntity<ErrorResponse> handleInvalidRequest(
+        InvalidRequestException ex, HttpServletRequest req) {
+    return buildError(HttpStatus.BAD_REQUEST, BAD_REQUEST_ERROR_MESSAGE, ex.getMessage(), req.getRequestURI());
+}
 
     private ResponseEntity<ErrorResponse> buildError(
             HttpStatus status, String error, String message, String path) {

@@ -42,6 +42,7 @@ public class OrderServiceImpl implements OrderService {
     private final UserServiceClient userServiceClient;
 
     @Override
+    @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
         log.info("Creating order for userId={}", request.getUserId());
 
@@ -131,7 +132,7 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.updateEntityFromRequest(request, order);
 
         if (request.getOrderItems() != null && !request.getOrderItems().isEmpty()) {
-            order.getOrderItems().clear();   
+            order.clearOrderItems();   
             List<OrderItem> newItems = buildOrderItems(request.getOrderItems(), order);
             newItems.forEach(order::addOrderItem);
         }

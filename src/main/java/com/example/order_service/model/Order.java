@@ -54,5 +54,13 @@ public class Order extends BaseEntity {
         item.setOrder(this);
     }
  
-    public void removeOrderItem(OrderItem item) {orderItems.remove(item);item.setOrder(null);}
+    public void removeOrderItem(OrderItem item) {
+        orderItems.remove(item);
+        item.setOrder(null);
+    }
+    
+    public void clearOrderItems() {
+        new ArrayList<>(orderItems).forEach(this::removeOrderItem);
+    }
+
 }
