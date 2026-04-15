@@ -12,6 +12,7 @@ import com.example.order_service.model.Order;
 import com.example.order_service.model.OrderItem;
 import com.example.order_service.exception.ItemNotFoundException;
 import com.example.order_service.exception.OrderNotFoundException;
+import com.example.order_service.exception.UserServiceUnavailableException;
 import com.example.order_service.mapper.OrderMapper;
 import com.example.order_service.repository.ItemRepository;
 import com.example.order_service.repository.OrderRepository;
@@ -41,7 +42,6 @@ public class OrderServiceImpl implements OrderService {
     private final UserServiceClient userServiceClient;
 
     @Override
-    @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
         log.info("Creating order for userId={}", request.getUserId());
 
@@ -53,23 +53,21 @@ public class OrderServiceImpl implements OrderService {
         Order saved = orderRepository.save(order);
         log.info("Order created with id={}", saved.getId());
 
-        UserResponse user = userServiceClient.getUserById(saved.getUserId());
+        UserResponse user = fetchUser(saved.getUserEmail());
         return orderMapper.toResponse(saved, user);
     }
 
 
     @Override
-    @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long id) {
         log.debug("Fetching order id={}", id);
         Order order = findActiveOrder(id);
-        UserResponse user = userServiceClient.getUserById(order.getUserId());
+        UserResponse user = fetchUser(order.getUserEmail());
         return orderMapper.toResponse(order, user);
     }
 
 
     @Override
-    @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getOrdersFiltered(OrderFilterRequest filter) {
         log.debug("Fetching orders with filter: {}", filter);
 
@@ -90,7 +88,7 @@ public class OrderServiceImpl implements OrderService {
 
         List<OrderResponse> responses = page.getContent().stream()
                 .map(o -> {
-                    UserResponse user = userServiceClient.getUserById(o.getUserId());
+                    UserResponse user = fetchUser(o.getUserEmail());
                     return orderMapper.toResponse(o, user);
                 })
                 .toList();
@@ -107,16 +105,21 @@ public class OrderServiceImpl implements OrderService {
 
 
     @Override
-    @Transactional(readOnly = true)
     public List<OrderResponse> getOrdersByUserId(Long userId) {
         log.debug("Fetching orders for userId={}", userId);
-
-        UserResponse user = userServiceClient.getUserById(userId);
-
-        return orderRepository.findByUserId(userId).stream()
+ 
+        List<Order> orders = orderRepository.findByUserId(userId);
+        if (orders.isEmpty()) {
+            return List.of();
+        }
+ 
+        UserResponse user = fetchUser(orders.get(0).getUserEmail());
+ 
+        return orders.stream()
                 .map(o -> orderMapper.toResponse(o, user))
                 .toList();
     }
+ 
 
 
     @Override
@@ -136,7 +139,7 @@ public class OrderServiceImpl implements OrderService {
         Order updated = orderRepository.save(order);
         log.info("Order id={} updated", id);
 
-        UserResponse user = userServiceClient.getUserById(updated.getUserId());
+        UserResponse user = fetchUser(updated.getUserEmail());
         return orderMapper.toResponse(updated, user);
     }
 
@@ -148,6 +151,16 @@ public class OrderServiceImpl implements OrderService {
         Order order = findActiveOrder(id);
         orderRepository.delete(order);
         log.info("Order id={} soft-deleted", id);
+    }
+
+    private UserResponse fetchUser(String email) {
+        try {
+            return userServiceClient.getUserByEmail(email);
+        } catch (UserServiceUnavailableException ex) {
+             log.warn("User Service unavailable for email='{}' — returning order without user info: {}",
+                email, ex.getMessage());
+            return null; 
+        }
     }
 
 

@@ -2,7 +2,6 @@ package com.example.order_service.exception;
 
 import com.example.order_service.dto.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -15,7 +14,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.time.Instant;
 
-@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -24,7 +22,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ItemNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleItemNotFound(
             ItemNotFoundException ex, HttpServletRequest req) {
-        log.warn("Item not found: {}", ex.getMessage());
         return buildError(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), req.getRequestURI());
     }
 
@@ -38,6 +35,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFound(
+            UserNotFoundException ex, HttpServletRequest req) {
+        return buildError(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), req.getRequestURI());
+    }
+
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(
@@ -49,7 +52,6 @@ public class GlobalExceptionHandler {
                         fe -> fe.getDefaultMessage() == null ? "Invalid value" : fe.getDefaultMessage(),
                         (first, second) -> first   
                 ));
-        log.warn("Validation failed: {}", fieldErrors);
         ErrorResponse body = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error(BAD_REQUEST_ERROR_MESSAGE)
@@ -77,15 +79,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UserServiceException.class)
     public ResponseEntity<ErrorResponse> handleUserServiceError(
             UserServiceException ex, HttpServletRequest req) {
-        log.error("User service error: {}", ex.getMessage());
-        return buildError(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable", ex.getMessage(), req.getRequestURI());
+        return buildError(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable",
+                ex.getMessage(), req.getRequestURI());
     }
-
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(
             Exception ex, HttpServletRequest req) {
-        log.error("Unhandled exception at {}: {}", req.getRequestURI(), ex.getMessage(), ex);
         return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error",
                 "An unexpected error occurred", req.getRequestURI());
     }

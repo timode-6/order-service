@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 5
+      author: timode-6
+      changes:
+        - addColumn:
+            tableName: orders
+            columns:
+              - column:
+                  name: user_email
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_user_email
+            columns:
+              - column:
+                  name: user_email

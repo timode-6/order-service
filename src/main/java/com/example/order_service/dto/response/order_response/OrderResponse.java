@@ -8,12 +8,14 @@ import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Setter;
  
 import java.time.Instant;
 import java.util.List;
  
 @Data
 @Builder
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class OrderResponse {

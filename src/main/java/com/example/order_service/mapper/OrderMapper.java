@@ -23,8 +23,7 @@ public interface OrderMapper {
     OrderResponse toResponse(Order order);
  
     default OrderResponse toResponse(Order order, UserResponse user) {
-        OrderResponse response = toResponse(order);
-        response.setUser(user);
+        OrderResponse response = toResponse(order);response.setUser(user);
         return response;
     }
  

@@ -1,6 +1,8 @@
 package com.example.order_service.dto.request.order_request;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -21,6 +23,10 @@ public class CreateOrderRequest {
  
     @NotNull(message = "User ID must not be null")
     private Long userId;
+
+    @NotBlank(message = "User email must not be blank")
+    @Email(message = "User email must be valid")
+    private String userEmail;
  
     @NotNull(message = "Total price must not be null")
     @Positive(message = "Total price must be positive")

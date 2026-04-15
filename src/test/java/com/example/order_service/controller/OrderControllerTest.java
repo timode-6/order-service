@@ -14,7 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -47,7 +47,7 @@ class OrderControllerTest {
     void setUp() {
         UserResponse user = UserResponse.builder()
                 .id(5L).name("Alice").surname("Rossi")
-                .email("alice.rossi@example.com").build();
+                .email("alice.rossi@example.com").birthDate(Instant.parse("2024-12-03T10:15:30.00Z")).active(true).build();
 
         sampleResponse = OrderResponse.builder()
                 .id(10L).userId(5L)
@@ -67,6 +67,7 @@ class OrderControllerTest {
         private CreateOrderRequest validRequest() {
             return CreateOrderRequest.builder()
                     .userId(5L)
+                    .userEmail("alice.rossi@example.com")
                     .totalPrice(1998L)
                     .orderItems(List.of(new OrderItemRequest(1L, 2)))
                     .build();
@@ -91,6 +92,7 @@ class OrderControllerTest {
         void rejectsNullUserId() throws Exception {
             CreateOrderRequest bad = CreateOrderRequest.builder()
                     .userId(null)
+                    .userEmail("alice.rossi@example.com")
                     .totalPrice(10L)
                     .orderItems(List.of(new OrderItemRequest(1L, 1)))
                     .build();
@@ -107,6 +109,7 @@ class OrderControllerTest {
         void rejectsZeroPrice() throws Exception {
             CreateOrderRequest bad = CreateOrderRequest.builder()
                     .userId(1L)
+                    .userEmail("alice.rossi@example.com")
                     .totalPrice(0L)
                     .orderItems(List.of(new OrderItemRequest(1L, 1)))
                     .build();
@@ -123,6 +126,7 @@ class OrderControllerTest {
         void rejectsEmptyItems() throws Exception {
             CreateOrderRequest bad = CreateOrderRequest.builder()
                     .userId(1L)
+                    .userEmail("alice.rossi@example.com")
                     .totalPrice(0L)
                     .orderItems(List.of())
                     .build();
@@ -139,6 +143,7 @@ class OrderControllerTest {
         void rejectsZeroQuantity() throws Exception {
             CreateOrderRequest bad = CreateOrderRequest.builder()
                     .userId(1L)
+                    .userEmail("alice.rossi@example.com")
                     .totalPrice(0L)
                     .orderItems(List.of(new OrderItemRequest(1L, 0)))
                     .build();
@@ -161,6 +166,7 @@ class OrderControllerTest {
                             .content(om.writeValueAsString(validRequest())))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message").value(containsString("99")));
+                    
         }
     }
 

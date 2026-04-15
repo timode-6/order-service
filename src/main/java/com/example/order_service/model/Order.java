@@ -27,6 +27,9 @@ public class Order extends BaseEntity {
  
     @Column(name = "user_id", nullable = false)
     private Long userId;
+
+    @Column(name = "user_email", nullable = false)
+    private String userEmail;
  
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
@@ -51,8 +54,5 @@ public class Order extends BaseEntity {
         item.setOrder(this);
     }
  
-    public void removeOrderItem(OrderItem item) {
-        orderItems.remove(item);
-        item.setOrder(null);
-    }
+    public void removeOrderItem(OrderItem item) {orderItems.remove(item);item.setOrder(null);}
 }

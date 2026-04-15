@@ -1,7 +1,9 @@
 package com.example.order_service.client;
 
 import com.example.order_service.dto.response.user_response.*;
+import com.example.order_service.exception.UserNotFoundException;
 import com.example.order_service.exception.UserServiceException;
+import com.example.order_service.exception.UserServiceUnavailableException;
 import com.example.order_service.service.client.UserServiceClient;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -23,20 +25,24 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import java.net.URI;
 import java.time.Instant;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceClientTest {
 
-    @Mock private RestTemplate restTemplate;
+    @Mock 
+    private RestTemplate restTemplate;
 
     @InjectMocks
     private UserServiceClient client;
 
     private static final String BASE_URL = "http://user-service";
+     private static final String EMAIL = "alice.rossi@example.com";
+ 
     private static final UserResponse ALICE = UserResponse.builder()
             .id(5L).name("Alice").surname("Rossi")
-            .email("alice.rossi@example.com").birthDate(Instant.parse("2024-12-03T10:15:30.00Z"))
+            .email(EMAIL).birthDate(Instant.parse("2024-12-03T10:15:30.00Z"))
             .build();
 
     @BeforeEach
@@ -51,31 +57,31 @@ class UserServiceClientTest {
         @Test
         @DisplayName("returns user when User Service responds 200")
         void success() {
-            when(restTemplate.getForEntity(anyString(), eq(UserResponse.class), eq(5L)))
+            when(restTemplate.getForEntity(any(URI.class), eq(UserResponse.class)))
                     .thenReturn(ResponseEntity.ok(ALICE));
 
             UserResponse result = client.getUserById(5L);
 
             assertThat(result).isNotNull();
-            assertThat(result.getEmail()).isEqualTo("alice.rossi@example.com");
+            assertThat(result.getEmail()).isEqualTo(EMAIL);
         }
 
         @Test
-        @DisplayName("returns null when User Service responds 404")
+        @DisplayName("throws UserNotFoundException when User Service responds 404")
         void notFound() {
-            when(restTemplate.getForEntity(anyString(), eq(UserResponse.class), eq(99L)))
+            when(restTemplate.getForEntity(any(URI.class), eq(UserResponse.class)))
                     .thenThrow(HttpClientErrorException.create(
                             HttpStatus.NOT_FOUND, "Not Found", null, null, null));
 
-            UserResponse result = client.getUserById(99L);
-
-            assertThat(result).isNull();
+            assertThatThrownBy(() -> client.getUserById(5L))
+                    .isInstanceOf(UserNotFoundException.class)
+                    .hasMessageContaining("not found");
         }
 
         @Test
         @DisplayName("throws UserServiceException on RestClientException")
         void restClientFailure() {
-            when(restTemplate.getForEntity(anyString(), eq(UserResponse.class), eq(5L)))
+            when(restTemplate.getForEntity(any(URI.class), eq(UserResponse.class)))
                     .thenThrow(new ResourceAccessException("Connection refused"));
 
             assertThatThrownBy(() -> client.getUserById(5L))
@@ -86,12 +92,11 @@ class UserServiceClientTest {
         @Test
         @DisplayName("returns null body transparently when response body is null")
         void nullBody() {
-            when(restTemplate.getForEntity(anyString(), eq(UserResponse.class), eq(5L)))
+            when(restTemplate.getForEntity(any(URI.class), eq(UserResponse.class)))
                     .thenReturn(ResponseEntity.ok(null));
 
-            UserResponse result = client.getUserById(5L);
-
-            assertThat(result).isNull();
+           assertThatThrownBy(() -> client.getUserById(5L))
+                    .isInstanceOf(RuntimeException.class);
         }
     }
 
@@ -103,40 +108,38 @@ class UserServiceClientTest {
         @Test
         @DisplayName("returns user when User Service responds 200")
         void success() {
-            when(restTemplate.getForEntity(anyString(), eq(UserResponse.class),
-                    eq("alice.rossi@example.com")))
+            when(restTemplate.getForEntity(any(URI.class), eq(UserResponse.class)))
                     .thenReturn(ResponseEntity.ok(ALICE));
 
-            UserResponse result = client.getUserByEmail("alice.rossi@example.com");
+            UserResponse result = client.getUserByEmail(EMAIL);
 
             assertThat(result).isNotNull();
-            assertThat(result.getId()).isEqualTo(5L);
+            assertThat(result.getEmail()).isEqualTo(EMAIL);
         }
 
         @Test
-        @DisplayName("returns null when User Service responds 404")
+        @DisplayName("throws UserNotFoundException when User Service responds 404")
         void notFound() {
-            when(restTemplate.getForEntity(anyString(), eq(UserResponse.class),
-                    eq("unknown@example.com")))
+            when(restTemplate.getForEntity(any(URI.class), eq(UserResponse.class)))
                     .thenThrow(HttpClientErrorException.create(
                             HttpStatus.NOT_FOUND, "Not Found", null, null, null));
 
-            UserResponse result = client.getUserByEmail("unknown@example.com");
-
-            assertThat(result).isNull();
+            assertThatThrownBy(() -> client.getUserByEmail(EMAIL))
+                    .isInstanceOf(UserNotFoundException.class)
+                    .hasMessageContaining(EMAIL);
         }
 
         @Test
         @DisplayName("throws UserServiceException on RestClientException")
         void restClientFailure() {
-            when(restTemplate.getForEntity(anyString(), eq(UserResponse.class),
-                    eq("alice.rossi@example.com")))
-                    .thenThrow(new ResourceAccessException("timeout"));
+            when(restTemplate.getForEntity(any(URI.class), eq(UserResponse.class)))
+                    .thenThrow(new ResourceAccessException("Connection refused"));
 
-            assertThatThrownBy(() -> client.getUserByEmail("alice.rossi@example.com"))
+            assertThatThrownBy(() -> client.getUserByEmail(EMAIL))
                     .isInstanceOf(UserServiceException.class)
                     .hasMessageContaining("unavailable");
         }
+
     }
 
     @Nested
@@ -144,28 +147,44 @@ class UserServiceClientTest {
     class Fallbacks {
 
         @Test
-        @DisplayName("getUserByIdFallback returns null and does not throw")
-        void getUserByIdFallback() {
-            UserResponse result = client.getUserByIdFallback(
-                    5L, new RuntimeException("circuit open"));
+        @DisplayName("throws UserServiceUnavailableException when circuit is open")
+        void throwsOnCircuitOpen() {
 
-            assertThat(result).isNull();
+            Throwable thrown = catchThrowable(() ->
+            client.getUserByEmailFallback(EMAIL, new RuntimeException("circuit open")));
+
+            assertThat(thrown).isInstanceOf(UserServiceUnavailableException.class)
+            .hasMessageContaining("circuit open");
+
         }
-
+ 
         @Test
-        @DisplayName("getUserByEmailFallback returns null and does not throw")
-        void getUserByEmailFallback() {
-            UserResponse result = client.getUserByEmailFallback(
-                    "alice.rossi@example.com", new RuntimeException("circuit open"));
+        @DisplayName("re-throws UserNotFoundException unchanged — domain error is not wrapped")
+        void rethrowsUserNotFound() {
+            UserNotFoundException original = new UserNotFoundException(EMAIL);
+ 
+            Throwable thrown = catchThrowable(() ->
+            client.getUserByEmailFallback(EMAIL, original));
 
-            assertThat(result).isNull();
+            assertThat(thrown).isInstanceOf(UserNotFoundException.class).isSameAs(original);
         }
-
+ 
         @Test
-        @DisplayName("getUserByIdFallback is safe with null cause")
-        void fallbackWithNullMessage() {
-            UserResponse result = client.getUserByIdFallback(1L, new RuntimeException());
-            assertThat(result).isNull();
+        @DisplayName("never returns null")
+        void neverReturnsNull() {
+            Throwable thrown = catchThrowable(() ->
+            client.getUserByEmailFallback(EMAIL, new RuntimeException("any")));
+
+            assertThat(thrown).isInstanceOf(RuntimeException.class);
+        }
+ 
+        @Test
+        @DisplayName("handles throwable with null message safely")
+        void nullMessage() {
+            Throwable thrown = catchThrowable(() ->
+            client.getUserByEmailFallback(EMAIL, new RuntimeException()));
+
+            assertThat(thrown).isInstanceOf(RuntimeException.class);
         }
     }
 }
