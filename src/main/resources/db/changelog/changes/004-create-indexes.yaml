@@ -1,0 +1,101 @@
+databaseChangeLog:
+  - changeSet:
+      id: 4
+      author: timode-6
+      changes:
+        - createIndex:
+            tableName: items
+            indexName: idx_items_name
+            columns:
+              - column:
+                  name: name
+        - createIndex:
+            tableName: items
+            indexName: idx_items_price
+            columns:
+              - column:
+                  name: price
+
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_user_id
+            columns:
+              - column:
+                  name: user_id
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_status
+            columns:
+              - column:
+                  name: status
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_user_id_status
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: status
+        - sql:
+            sql: |
+              CREATE INDEX idx_orders_active
+                  ON orders (user_id, created_at DESC)
+                  WHERE deleted = false;
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_created_at
+            columns:
+              - column:
+                  name: created_at
+
+        - createIndex:
+            tableName: order_items
+            indexName: idx_order_items_order_id
+            columns:
+              - column:
+                  name: order_id
+        - createIndex:
+            tableName: order_items
+            indexName: idx_order_items_item_id
+            columns:
+              - column:
+                  name: item_id
+        - createIndex:
+            tableName: order_items
+            indexName: idx_order_items_order_id_item_id
+            unique: true
+            columns:
+              - column:
+                  name: order_id
+              - column:
+                  name: item_id
+      rollback:
+        - dropIndex:
+            tableName: items
+            indexName: idx_items_name
+        - dropIndex:
+            tableName: items
+            indexName: idx_items_price
+        - dropIndex:
+            tableName: orders
+            indexName: idx_orders_user_id
+        - dropIndex:
+            tableName: orders
+            indexName: idx_orders_status
+        - dropIndex:
+            tableName: orders
+            indexName: idx_orders_user_id_status
+        - dropIndex:
+            tableName: orders
+            indexName: idx_orders_created_at
+        - dropIndex:
+            tableName: order_items
+            indexName: idx_order_items_order_id
+        - dropIndex:
+            tableName: order_items
+            indexName: idx_order_items_item_id
+        - dropIndex:
+            tableName: order_items
+            indexName: idx_order_items_order_id_item_id
+        - sql:
+            sql: DROP INDEX IF EXISTS idx_orders_active;
