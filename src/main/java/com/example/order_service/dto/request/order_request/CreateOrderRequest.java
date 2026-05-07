@@ -21,7 +21,7 @@ import com.example.order_service.dto.request.order_item_request.*;
 @AllArgsConstructor
 public class CreateOrderRequest {
  
-    @NotNull(message = "User ID must not be null")
+    @NotNull(message = "User ID must not be null") 
     private Long userId;
 
     @NotBlank(message = "User email must not be blank")

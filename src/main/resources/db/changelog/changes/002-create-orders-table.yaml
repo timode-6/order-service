@@ -52,7 +52,7 @@ databaseChangeLog:
             sql: |
               ALTER TABLE orders
               ADD CONSTRAINT chk_orders_status
-              CHECK (status IN ('PENDING','CONFIRMED','SHIPPED','DELIVERED','CANCELLED'));
+              CHECK (status IN ('PENDING','SUCCESS','SHIPPED','DELIVERED','CANCELLED'));
       rollback:
         - dropTable:
             tableName: orders

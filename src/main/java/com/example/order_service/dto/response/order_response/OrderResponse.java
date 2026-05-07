@@ -9,13 +9,15 @@ import lombok.NoArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.Setter;
- 
+import lombok.extern.jackson.Jacksonized;
+
 import java.time.Instant;
 import java.util.List;
  
 @Data
 @Builder
 @Setter
+@Jacksonized 
 @NoArgsConstructor
 @AllArgsConstructor
 public class OrderResponse {

@@ -7,13 +7,15 @@ import com.example.order_service.dto.request.order_request.UpdateOrderRequest;
 import com.example.order_service.dto.response.PageResponse;
 import com.example.order_service.dto.response.order_response.OrderResponse;
 import com.example.order_service.dto.response.user_response.UserResponse;
-import com.example.order_service.model.Item;
-import com.example.order_service.model.Order;
-import com.example.order_service.model.OrderItem;
 import com.example.order_service.exception.ItemNotFoundException;
 import com.example.order_service.exception.OrderNotFoundException;
 import com.example.order_service.exception.UserServiceUnavailableException;
+import com.example.order_service.kafka.events.*;
+import com.example.order_service.kafka.OrderEventProducer;
 import com.example.order_service.mapper.OrderMapper;
+import com.example.order_service.model.Item;
+import com.example.order_service.model.Order;
+import com.example.order_service.model.OrderItem;
 import com.example.order_service.repository.ItemRepository;
 import com.example.order_service.repository.OrderRepository;
 import com.example.order_service.service.client.UserServiceClient;
@@ -28,8 +30,10 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -40,6 +44,7 @@ public class OrderServiceImpl implements OrderService {
     private final ItemRepository itemRepository;
     private final OrderMapper orderMapper;
     private final UserServiceClient userServiceClient;
+    private final OrderEventProducer orderEventProducer;   
 
     @Override
     @Transactional
@@ -51,13 +56,21 @@ public class OrderServiceImpl implements OrderService {
         List<OrderItem> items = buildOrderItems(request.getOrderItems(), order);
         items.forEach(order::addOrderItem);
 
+        long calculatedTotal = items.stream()
+                .mapToLong(oi -> oi.getItem().getPrice() * oi.getQuantity())
+                .sum();
+
+        order.setTotalPrice(calculatedTotal);
+        log.info("Calculated totalPrice for order: {}", calculatedTotal);
+
         Order saved = orderRepository.save(order);
         log.info("Order created with id={}", saved.getId());
+
+        publishOrderCreated(saved);
 
         UserResponse user = fetchUser(saved.getUserEmail());
         return orderMapper.toResponse(saved, user);
     }
-
 
     @Override
     public OrderResponse getOrderById(Long id) {
@@ -66,7 +79,6 @@ public class OrderServiceImpl implements OrderService {
         UserResponse user = fetchUser(order.getUserEmail());
         return orderMapper.toResponse(order, user);
     }
-
 
     @Override
     public PageResponse<OrderResponse> getOrdersFiltered(OrderFilterRequest filter) {
@@ -104,24 +116,19 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-
     @Override
     public List<OrderResponse> getOrdersByUserId(Long userId) {
         log.debug("Fetching orders for userId={}", userId);
- 
+
         List<Order> orders = orderRepository.findByUserId(userId);
-        if (orders.isEmpty()) {
-            return List.of();
-        }
- 
+        if (orders.isEmpty()) return List.of();
+
         UserResponse user = fetchUser(orders.get(0).getUserEmail());
- 
+
         return orders.stream()
                 .map(o -> orderMapper.toResponse(o, user))
                 .toList();
     }
- 
-
 
     @Override
     @Transactional
@@ -132,7 +139,7 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.updateEntityFromRequest(request, order);
 
         if (request.getOrderItems() != null && !request.getOrderItems().isEmpty()) {
-            order.clearOrderItems();   
+            order.clearOrderItems();
             List<OrderItem> newItems = buildOrderItems(request.getOrderItems(), order);
             newItems.forEach(order::addOrderItem);
         }
@@ -144,7 +151,6 @@ public class OrderServiceImpl implements OrderService {
         return orderMapper.toResponse(updated, user);
     }
 
-
     @Override
     @Transactional
     public void deleteOrder(Long id) {
@@ -154,16 +160,28 @@ public class OrderServiceImpl implements OrderService {
         log.info("Order id={} soft-deleted", id);
     }
 
+    private void publishOrderCreated(Order saved) {
+        OrderCreatedEvent event = OrderCreatedEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .orderId(saved.getId())
+                .userId(saved.getUserId())
+                .userEmail(saved.getUserEmail())
+                .totalAmount(saved.getTotalPrice())
+                .timestamp(saved.getCreatedAt() != null ? saved.getCreatedAt() : Instant.now())
+                .build();
+
+        orderEventProducer.publishOrderCreated(event);
+    }
+
     private UserResponse fetchUser(String email) {
         try {
             return userServiceClient.getUserByEmail(email);
         } catch (UserServiceUnavailableException ex) {
-             log.warn("User Service unavailable for email='{}' — returning order without user info: {}",
-                email, ex.getMessage());
-            return null; 
+            log.warn("User Service unavailable for email='{}' — returning order without user info: {}",
+                    email, ex.getMessage());
+            return null;
         }
     }
-
 
     private Order findActiveOrder(Long id) {
         return orderRepository.findById(id)

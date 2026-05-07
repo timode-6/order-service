@@ -8,6 +8,9 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -28,21 +31,31 @@ public class UserServiceClient {
     @Value("${services.user-service.base-url}")
     private String userServiceBaseUrl;
 
+    @Value("${gateway.internal-secret}")
+    private String internalSecret;            
+
     private static final String CB_NAME = "userService";
+
+    private HttpEntity<Void> internalRequest() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Internal-Secret", internalSecret);
+        return new HttpEntity<>(headers);
+    }
 
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "getUserByEmailFallback")
     public UserResponse getUserByEmail(String email) {
         URI uri = UriComponentsBuilder
-                .fromUriString(userServiceBaseUrl)
-                .path("/api/users")
-                .queryParam("email", email)      
-                .build()
-                .toUri();
+            .fromUriString(userServiceBaseUrl)
+            .path("/api/users/search")   
+            .queryParam("email", email)
+            .build()
+            .toUri();
 
         log.debug("Calling User Service: GET {}", uri);  
         try {
             ResponseEntity<UserResponse> response =
-                    restTemplate.getForEntity(uri, UserResponse.class);  
+                    restTemplate.exchange(uri, HttpMethod.GET, internalRequest(), UserResponse.class);  
+            
             if (response.getBody() == null) {
                 throw new UserServiceException("User Service returned empty response", null);
             }
@@ -55,6 +68,7 @@ public class UserServiceClient {
             throw new UserServiceException("User Service is currently unavailable", ex);
         }
     }
+
 
     @SuppressWarnings("unused")
     public UserResponse getUserByEmailFallback(String email, Throwable ex) {
@@ -70,15 +84,14 @@ public class UserServiceClient {
     public UserResponse getUserById(Long userId) {
         URI uri = UriComponentsBuilder
                 .fromUriString(userServiceBaseUrl)
-                .path("/api/users")
-                .queryParam("userId", userId)      
+                .path("/api/users/{userId}")     
                 .build()
                 .toUri();
 
         log.debug("Calling User Service: GET {}", uri);  
         try {
             ResponseEntity<UserResponse> response =
-                    restTemplate.getForEntity(uri, UserResponse.class);  
+                    restTemplate.exchange(uri, HttpMethod.GET, internalRequest(), UserResponse.class);  
             if (response.getBody() == null) {
                 throw new UserServiceException("User Service returned empty response", null);
             }
