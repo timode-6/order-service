@@ -15,6 +15,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
+import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
@@ -22,38 +24,44 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 public abstract class BaseIntegrationTest {
 
-    static final PostgreSQLContainer postgres =
-            new PostgreSQLContainer("postgres:12-alpine")
-                    .withDatabaseName("testdb")
-                    .withUsername("test")
-                    .withPassword("test");
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:12-alpine")
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test");
 
-    static final WireMockServer wireMock =
-            new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
+    static final WireMockServer wireMock = new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
+
+    static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer(
+            DockerImageName.parse("confluentinc/cp-kafka:7.6.1"));
 
     static {
         postgres.start();
-        wireMock.start(); 
-        
+        wireMock.start();
+        kafka.start(); 
     }
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url",      postgres::getJdbcUrl);
-        registry.add("spring.datasource.username",  postgres::getUsername);
-        registry.add("spring.datasource.password",  postgres::getPassword);
-        registry.add("spring.datasource.hikari.maximum-pool-size",           () -> 5);
-        registry.add("spring.datasource.hikari.connection-timeout",          () -> 20000);
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> 5);
+        registry.add("spring.datasource.hikari.connection-timeout", () -> 20000);
         registry.add("spring.datasource.hikari.initialization-fail-timeout", () -> 60000);
 
         registry.add("services.user-service.base-url",
                 () -> "http://localhost:" + wireMock.port());
+        registry.add("gateway.internal-secret",
+                () -> "1$MjQ0ODc4ZTNhOGM5N2ViNDIzYmEzNDJhN2VmMjMwMzE$GYaUg+8XVS1Y0WBhM2HdGJ0Wyjneyu19mQfd9OtutWQ");
+
+        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
     }
+
 
     @AfterEach
     void resetWireMock() {
         wireMock.resetAll();
-     
+
     }
 
     @LocalServerPort

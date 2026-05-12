@@ -25,21 +25,17 @@ public class PaymentEventConsumer {
 
     private final OrderRepository orderRepository;
 
-    @KafkaListener(
-        topics        = "${kafka.topics.payment-created:payment.created}",
-        groupId       = "${kafka.consumer.group-id:order-service-group}",
-        containerFactory = "paymentEventListenerContainerFactory"
-    )
+    @KafkaListener(topics = "${kafka.topics.payment-created:payment.created}", groupId = "${kafka.consumer.group-id:order-service-group}", containerFactory = "paymentEventListenerContainerFactory")
     @Transactional
     public void handlePaymentCreated(
-            @Payload  CreatePaymentEvent event,
-            @Header(KafkaHeaders.RECEIVED_TOPIC)     String topic,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) int    partition,
-            @Header(KafkaHeaders.OFFSET)             long   offset,
+            @Payload CreatePaymentEvent event,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment ack) {
 
         log.info("Received CREATE_PAYMENT event: eventId={} paymentId={} orderId={} status={} " +
-                 "[topic={} partition={} offset={}]",
+                "[topic={} partition={} offset={}]",
                 event.getEventId(), event.getPaymentId(),
                 event.getOrderId(), event.getPaymentStatus(),
                 topic, partition, offset);
@@ -55,9 +51,12 @@ public class PaymentEventConsumer {
         }
     }
 
-
     private void processEvent(CreatePaymentEvent event) {
-        long orderId = parseOrderId(event.getOrderId());
+        Long orderId = parseOrderId(event.getOrderId());
+
+        if (orderId == null) {
+            return;
+        }
 
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) {
@@ -91,20 +90,25 @@ public class PaymentEventConsumer {
     }
 
     private static OrderStatus resolveOrderStatus(String paymentStatus) {
-        if (paymentStatus == null) return null;
+        if (paymentStatus == null)
+            return null;
         return switch (paymentStatus.toUpperCase()) {
-            case "SUCCESS"   -> OrderStatus.SUCCESS;
-            case "FAILED"    -> OrderStatus.CANCELLED;
-            default          -> null;
+            case "SUCCESS" -> OrderStatus.SUCCESS;
+            case "FAILED" -> OrderStatus.CANCELLED;
+            default -> null;
         };
     }
 
-    private static long parseOrderId(String raw) {
+    private Long parseOrderId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            log.warn("Received event with null/blank orderId — skipping");
+            return null;
+        }
         try {
             return Long.parseLong(raw);
         } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException(
-                    "Cannot parse orderId '" + raw + "' as Long", ex);
+            log.warn("Received event with non-numeric orderId '{}' — skipping", raw);
+            return null;
         }
     }
 }

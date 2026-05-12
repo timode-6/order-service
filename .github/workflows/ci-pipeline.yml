@@ -3,11 +3,11 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - main
+      - master
       - tasks
   pull_request:
     branches:
-      - main
+      - master
       - tasks
 
 env:

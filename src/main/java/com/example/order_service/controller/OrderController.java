@@ -16,12 +16,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.CurrentSecurityContext;
-import org.springframework.security.core.context.SecurityContext;
 import org.springframework.web.bind.annotation.*;
-
-
 
 import java.time.Instant;
 import java.util.List;
@@ -31,8 +26,9 @@ import java.util.List;
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
 public class OrderController {
+
     private final OrderService orderService;
-    private final SecurityUtils securityUtils; 
+    private final SecurityUtils securityUtils;
 
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
@@ -42,7 +38,6 @@ public class OrderController {
                 .body(orderService.createOrder(request));
     }
 
-
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or @orderSecurity.isOwner(#id, authentication.name)")
     public ResponseEntity<OrderResponse> getOrderById(@PathVariable Long id) {
@@ -51,7 +46,7 @@ public class OrderController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")  
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<OrderResponse>> getOrders(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant createdTo,
@@ -60,9 +55,11 @@ public class OrderController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir) {
+
         OrderFilterRequest filter = OrderFilterRequest.builder()
                 .createdFrom(createdFrom).createdTo(createdTo).statuses(statuses)
                 .page(page).size(size).sortBy(sortBy).sortDir(sortDir).build();
+
         return ResponseEntity.ok(orderService.getOrdersFiltered(filter));
     }
 

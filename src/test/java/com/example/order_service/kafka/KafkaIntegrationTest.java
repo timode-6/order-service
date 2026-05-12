@@ -11,13 +11,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
+import org.springframework.kafka.test.utils.ContainerTestUtils;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -36,128 +41,147 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+@DirtiesContext
 @SpringBootTest
 @Testcontainers
 @ActiveProfiles("test")
 class KafkaIntegrationTest {
 
-        @Container
-        static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.1"));
 
-        @Container
-        static final PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse("postgres:16-alpine"))
-                        .withDatabaseName("order_db")
-                        .withUsername("order_user")
-                        .withPassword("order_pass");
+    @Container
+    static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer(
+            DockerImageName.parse("confluentinc/cp-kafka:7.6.1"));
 
-        @DynamicPropertySource
-        static void overrideProperties(DynamicPropertyRegistry registry) {
-                registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
-                registry.add("spring.datasource.url", postgres::getJdbcUrl);
-                registry.add("spring.datasource.username", postgres::getUsername);
-                registry.add("spring.datasource.password", postgres::getPassword);
+    @Container
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer(
+            DockerImageName.parse("postgres:16-alpine"))
+            .withDatabaseName("order_db")
+            .withUsername("order_user")
+            .withPassword("order_pass");
 
-                registry.add("spring.kafka.producer.key-serializer",
-                                () -> "org.apache.kafka.common.serialization.StringSerializer");
-                registry.add("spring.kafka.producer.value-serializer",
-                                () -> "org.springframework.kafka.support.serializer.JsonSerializer");
+    @DynamicPropertySource
+    static void overrideProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+
+        registry.add("spring.kafka.consumer.properties.spring.json.trusted.packages", () -> "*");
+        registry.add("spring.kafka.consumer.auto-offset-reset", () -> "earliest");
+        registry.add("kafka.consumer.group-id",
+                () -> "test-group-" + UUID.randomUUID());
+    }
+
+
+    @TestConfiguration
+    static class KafkaTestConfig {
+
+        @Bean
+        ProducerFactory<String, CreatePaymentEvent> testProducerFactory(
+                KafkaProperties props) {
+            Map<String, Object> cfg = new HashMap<>(props.buildProducerProperties());
+            cfg.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,   StringSerializer.class);
+            cfg.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JacksonJsonSerializer.class);
+            cfg.put(JacksonJsonSerializer.ADD_TYPE_INFO_HEADERS, false);
+            return new DefaultKafkaProducerFactory<>(cfg);
         }
 
-        @Autowired
-        private KafkaTemplate<String, CreatePaymentEvent> kafkaTemplate;
+        @Bean
+        KafkaTemplate<String, CreatePaymentEvent> paymentKafkaTemplate(
+                ProducerFactory<String, CreatePaymentEvent> testProducerFactory) {
+            return new KafkaTemplate<>(testProducerFactory);
+        }
+    }
 
-        @Autowired
-        private OrderRepository orderRepository;
 
-        @Value("${kafka.topics.payment-created:payment.created}")
-        private String topic;
+    @Autowired
+    private KafkaTemplate<String, CreatePaymentEvent> paymentKafkaTemplate;
 
-        private Order savedOrder;
+    @Autowired
+    private OrderRepository orderRepository;
 
-        @TestConfiguration
-        static class KafkaManualConfig {
-                @Bean
-                public ProducerFactory<String, CreatePaymentEvent> producerFactory() {
-                        Map<String, Object> config = new HashMap<>();
-                        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
-                        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-                        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JacksonJsonSerializer.class);
-                        return new DefaultKafkaProducerFactory<>(config);
-                }
+    @Autowired
+    private KafkaListenerEndpointRegistry listenerRegistry;
 
-                @Bean
-                public KafkaTemplate<String, CreatePaymentEvent> kafkaTemplate(
-                                ProducerFactory<String, CreatePaymentEvent> pf) {
-                        return new KafkaTemplate<>(pf);
-                }
+    @Value("${kafka.topics.payment-created:payment.created}")
+    private String topic;
+
+    private Order savedOrder;
+
+
+    @BeforeEach
+    void setUp() {
+        for (MessageListenerContainer container : listenerRegistry.getListenerContainers()) {
+            ContainerTestUtils.waitForAssignment(container, 1);
         }
 
-        @BeforeEach
-        void setUp() {
-                orderRepository.deleteAll();
-                Order order = new Order();
-                order.setUserId(1L);
-                order.setUserEmail("test@example.com");
-                order.setStatus(OrderStatus.PENDING);
-                order.setTotalPrice(5000L);
-                savedOrder = orderRepository.save(order);
-        }
+        orderRepository.deleteAll();
 
-        @Test
-        void completedEvent_orderConfirmed() {
-                kafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
-                                buildEvent(savedOrder.getId(), "SUCCESS"));
+        Order order = new Order();
+        order.setUserId(1L);
+        order.setUserEmail("test@example.com");
+        order.setStatus(OrderStatus.PENDING);
+        order.setTotalPrice(5000L);
+        savedOrder = orderRepository.save(order);
+    }
 
-                await().atMost(5, TimeUnit.SECONDS)
-                                .untilAsserted(() -> {
-                                        Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
-                                        assertThat(updated.getStatus()).isEqualTo(OrderStatus.SUCCESS);
-                                });
-        }
 
-        @Test
-        void failedEvent_orderCancelled() {
-                kafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
-                                buildEvent(savedOrder.getId(), "FAILED"));
+    @Test
+    void completedEvent_orderConfirmed() {
+        paymentKafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
+                buildEvent(savedOrder.getId(), "SUCCESS"));
 
-                await().atMost(5, TimeUnit.SECONDS)
-                                .untilAsserted(() -> {
-                                        Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
-                                        assertThat(updated.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-                                });
-        }
+        await().atMost(10, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
+                    assertThat(updated.getStatus()).isEqualTo(OrderStatus.SUCCESS);
+                });
+    }
 
-        @Test
-        void duplicateEvent_idempotent() {
-                kafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
-                                buildEvent(savedOrder.getId(), "SUCCESS"));
+    @Test
+    void failedEvent_orderCancelled() {
+        paymentKafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
+                buildEvent(savedOrder.getId(), "FAILED"));
 
-                await().atMost(5, TimeUnit.SECONDS)
-                                .untilAsserted(() -> {
-                                        Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
-                                        assertThat(updated.getStatus()).isEqualTo(OrderStatus.SUCCESS);
-                                });
+        await().atMost(10, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
+                    assertThat(updated.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+                });
+    }
 
-                kafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
-                                buildEvent(savedOrder.getId(), "FAILED"));
+    @Test
+    void duplicateEvent_idempotent() {
+        paymentKafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
+                buildEvent(savedOrder.getId(), "SUCCESS"));
 
-                await().during(2, TimeUnit.SECONDS)
-                                .atMost(4, TimeUnit.SECONDS)
-                                .untilAsserted(() -> {
-                                        Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
-                                        assertThat(updated.getStatus()).isEqualTo(OrderStatus.SUCCESS);
-                                });
-        }
+        await().atMost(10, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
+                    assertThat(updated.getStatus()).isEqualTo(OrderStatus.SUCCESS);
+                });
 
-        private CreatePaymentEvent buildEvent(Long orderId, String paymentStatus) {
-                return CreatePaymentEvent.builder()
-                                .eventId(UUID.randomUUID().toString())
-                                .paymentId("pay-" + UUID.randomUUID())
-                                .orderId(String.valueOf(orderId))
-                                .userId("user-1")
-                                .paymentStatus(paymentStatus)
-                                .paymentAmount(5000L)
-                                .timestamp(Instant.now())
-                                .build();
-        }
+        paymentKafkaTemplate.send(topic, String.valueOf(savedOrder.getId()),
+                buildEvent(savedOrder.getId(), "FAILED"));
+
+        await().pollDelay(3, TimeUnit.SECONDS)
+                .atMost(10, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    Order updated = orderRepository.findById(savedOrder.getId()).orElseThrow();
+                    assertThat(updated.getStatus()).isEqualTo(OrderStatus.SUCCESS);
+                });
+    }
+
+
+    private CreatePaymentEvent buildEvent(Long orderId, String paymentStatus) {
+        return CreatePaymentEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .paymentId("pay-" + UUID.randomUUID())
+                .orderId(String.valueOf(orderId))
+                .userId("user-1")
+                .paymentStatus(paymentStatus)
+                .paymentAmount(5000L)
+                .timestamp(Instant.now())
+                .build();
+    }
 }

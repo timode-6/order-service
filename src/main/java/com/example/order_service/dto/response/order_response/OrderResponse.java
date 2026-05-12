@@ -1,6 +1,7 @@
 package com.example.order_service.dto.response.order_response;
  
 import com.example.order_service.model.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.example.order_service.dto.response.order_item_response.OrderItemResponse;
 import com.example.order_service.dto.response.user_response.*;
 
@@ -26,7 +27,10 @@ public class OrderResponse {
     private OrderStatus status;
     private Long totalPrice;
     private List<OrderItemResponse> orderItems;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
     private Instant createdAt;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
     private Instant updatedAt;
  
     private UserResponse user;

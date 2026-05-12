@@ -19,6 +19,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 
 import java.util.List;
+import java.util.Map;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +49,7 @@ class OrderIntegrationTest extends BaseIntegrationTest {
                           "active": true
                         }
                         """;
+
         @BeforeEach
         void setUp() {
                 com.github.tomakehurst.wiremock.client.WireMock.configureFor("localhost", wireMock.port());
@@ -64,7 +66,7 @@ class OrderIntegrationTest extends BaseIntegrationTest {
                 assertThat(savedItem.getId()).isNotNull();
         }
 
-                private void stubUserByEmail() {
+        private void stubUserByEmail() {
                 wireMock.stubFor(get(urlPathEqualTo("/api/users/search"))
                                 .withQueryParam("email", equalTo(USER_EMAIL))
                                 .willReturn(aResponse()
@@ -101,6 +103,14 @@ class OrderIntegrationTest extends BaseIntegrationTest {
                                 new HttpEntity<>(request, headers),
                                 OrderResponse.class);
 
+                ResponseEntity<Map> check = restTemplate.exchange(
+                                baseUrl("/api/orders"),
+                                HttpMethod.POST,
+                                new HttpEntity<>(request, headers),
+                                Map.class); 
+                System.out.println("JSON FROM SERVER: " + check.getBody());
+
+                System.out.println("DEBUG: Response body: " + response.getBody());
                 if (response.getStatusCode() != HttpStatus.CREATED) {
                         System.out.println("ERROR BODY: " + response.getBody());
                 }

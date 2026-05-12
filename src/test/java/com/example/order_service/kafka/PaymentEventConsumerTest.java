@@ -141,15 +141,13 @@ class PaymentEventConsumerTest {
     }
 
     @Test
-    void invalidOrderId_throws() {
+    void invalidOrderId_isSkipped() {
         CreatePaymentEvent badEvent = event("COMPLETED");
         badEvent.setOrderId("not-a-number");
 
-        assertThatThrownBy(() -> consumer.handlePaymentCreated(badEvent, "payment.created", 0, 0L, ack))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Cannot parse orderId");
+        consumer.handlePaymentCreated(badEvent, "payment.created", 0, 0L, ack);
 
-        verify(ack, never()).acknowledge();
+        verify(orderRepository, never()).findById(any());
     }
 
     @Test

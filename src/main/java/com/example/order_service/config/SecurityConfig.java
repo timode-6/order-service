@@ -15,16 +15,16 @@ import lombok.RequiredArgsConstructor;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity   
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final InternalAuthFilter internalAuthFilter;
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http){
+    public SecurityFilterChain filterChain(HttpSecurity http) {
         return http
+                .csrf(csrf -> csrf.ignoringRequestMatchers(request -> request.getHeader("X-Internal-Secret") != null))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .csrf(csrf -> csrf.disable())
                 .addFilterBefore(internalAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                 .build();
